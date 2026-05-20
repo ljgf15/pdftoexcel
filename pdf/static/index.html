@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>PDF采购订单提取到Excel</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --text: #172033;
+      --muted: #667085;
+      --line: #d9e1ec;
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --danger: #dc2626;
+      --ok: #15803d;
+      --shadow: 0 18px 48px rgba(19, 28, 45, .08);
+      --radius: 18px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+      color: var(--text);
+      background: linear-gradient(180deg, #eaf1ff 0, var(--bg) 260px);
+    }
+    .wrap {
+      width: min(1260px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 30px 0 56px;
+    }
+    header {
+      margin-bottom: 18px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(26px, 4vw, 40px);
+      letter-spacing: -0.04em;
+      line-height: 1.1;
+    }
+    .sub {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.7;
+      font-size: 15px;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 390px 1fr;
+      gap: 18px;
+      align-items: start;
+    }
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 18px;
+    }
+    .card h2 {
+      margin: 0 0 14px;
+      font-size: 18px;
+      letter-spacing: -0.02em;
+    }
+    .field {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    label {
+      font-weight: 800;
+      font-size: 14px;
+    }
+    .hint {
+      color: var(--muted);
+      font-size: 12.5px;
+      line-height: 1.55;
+    }
+    input[type="file"], input[type="search"] {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px 13px;
+      background: #fff;
+      font: inherit;
+      outline: none;
+    }
+    input:focus {
+      border-color: #93b4ff;
+      box-shadow: 0 0 0 4px rgba(37, 99, 235, .12);
+    }
+    .button-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 9px;
+      margin: 12px 0;
+    }
+    button {
+      border: 0;
+      border-radius: 999px;
+      padding: 11px 15px;
+      color: #fff;
+      background: var(--primary);
+      cursor: pointer;
+      font-weight: 800;
+      transition: .15s ease;
+    }
+    button:hover { background: var(--primary-dark); transform: translateY(-1px); }
+    button:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+    .secondary {
+      background: #edf2ff;
+      color: #1d4ed8;
+    }
+    .secondary:hover { background: #dfe8ff; }
+    .danger {
+      background: #fee2e2;
+      color: #b91c1c;
+    }
+    .danger:hover { background: #fecaca; }
+    .status {
+      padding: 11px 13px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: #f8fafc;
+      color: var(--muted);
+      line-height: 1.55;
+      white-space: pre-wrap;
+      margin-top: 12px;
+      font-size: 13px;
+    }
+    .status.ok { color: var(--ok); background: #f0fdf4; border-color: #bbf7d0; }
+    .status.err { color: var(--danger); background: #fef2f2; border-color: #fecaca; }
+    .checks {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 10px;
+      max-height: 420px;
+      overflow: auto;
+      background: #fbfdff;
+      display: grid;
+      gap: 7px;
+    }
+    .check {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 8px 9px;
+      border-radius: 12px;
+      background: #fff;
+      border: 1px solid #eef2f7;
+      font-size: 13.5px;
+      user-select: none;
+    }
+    .check:hover { border-color: #bdd0ff; }
+    .check input { width: 16px; height: 16px; }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .metric {
+      padding: 13px;
+      border-radius: 16px;
+      background: #f8fafc;
+      border: 1px solid var(--line);
+    }
+    .metric b {
+      display: block;
+      font-size: 21px;
+      margin-bottom: 2px;
+    }
+    .metric span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .table-wrap {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      overflow: auto;
+      max-height: 610px;
+      background: #fff;
+    }
+    table {
+      border-collapse: collapse;
+      min-width: 980px;
+      width: 100%;
+      font-size: 13px;
+    }
+    th, td {
+      padding: 9px 10px;
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+      white-space: pre-wrap;
+      max-width: 260px;
+    }
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: #f8fafc;
+      font-size: 12px;
+    }
+    th:last-child, td:last-child { border-right: 0; }
+    tr:last-child td { border-bottom: 0; }
+    .errors {
+      margin-top: 12px;
+      display: none;
+      border: 1px solid #fecaca;
+      background: #fff7f7;
+      border-radius: 14px;
+      padding: 12px;
+      color: #991b1b;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .errors ul { margin: 8px 0 0 18px; padding: 0; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <h1>PDF采购订单提取到Excel</h1>
+      <p class="sub">无需注册。上传 PDF，勾选需要的列，先预览结果，再下载 Excel。当前版本的可选字段已限制为指定白名单。</p>
+    </header>
+
+    <section class="layout">
+      <aside class="card">
+        <h2>1. 上传PDF</h2>
+        <div class="field">
+          <label for="pdfFiles">PDF文件</label>
+          <input id="pdfFiles" type="file" accept="application/pdf,.pdf" multiple />
+          <div class="hint">支持一次上传多个文字型 PDF。扫描件或图片 PDF 需要先 OCR。</div>
+        </div>
+
+        <h2>2. 勾选导出列</h2>
+        <div class="field">
+          <label for="fieldSearch">搜索字段</label>
+          <input id="fieldSearch" type="search" placeholder="例如：尺寸、Sales、单价、轿门" />
+        </div>
+        <div class="button-row">
+          <button class="secondary" type="button" id="selectAllBtn">全选</button>
+          <button class="secondary" type="button" id="selectDefaultBtn">推荐字段</button>
+          <button class="danger" type="button" id="clearBtn">清空</button>
+        </div>
+        <div id="fieldChecks" class="checks"></div>
+
+        <h2 style="margin-top:18px;">3. 提取与导出</h2>
+        <div class="button-row">
+          <button id="previewBtn" type="button">开始提取并预览</button>
+          <button id="downloadBtn" class="secondary" type="button" disabled>下载Excel</button>
+        </div>
+        <div id="status" class="status">准备好了。页面不需要登录或注册。</div>
+      </aside>
+
+      <section class="card">
+        <h2>预览结果</h2>
+        <div class="summary">
+          <div class="metric"><b id="fileCount">0</b><span>PDF文件</span></div>
+          <div class="metric"><b id="rowCount">0</b><span>提取行数</span></div>
+          <div class="metric"><b id="errorCount">0</b><span>错误数量</span></div>
+        </div>
+        <div class="table-wrap">
+          <table id="previewTable">
+            <thead><tr><th>等待提取</th></tr></thead>
+            <tbody><tr><td>请先上传 PDF，并点击“开始提取并预览”。</td></tr></tbody>
+          </table>
+        </div>
+        <div id="errors" class="errors"></div>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    const ALLOWED_FIELDS = [
+      "送货日期",
+      "订单号",
+      "件号",
+      "物料名称",
+      "物料规格",
+      "单位",
+      "数量",
+      "未税单价",
+      "未税总价",
+      "印刷",
+      "Pos",
+      "Material",
+      "Quantity",
+      "Unit",
+      "Price",
+      "Amount",
+      "Sales order ref",
+      "Sales order no",
+      "Sales order item",
+      "轿厢净开门宽度_LL_mm",
+      "轿门净高_HH_mm",
+      "门尺寸_LL*HH",
+      "DIM_CAR_BOX_INNER_LENGTH_mm",
+      "DIM_CAR_BOX_INNER_WIDTH_mm",
+      "DIM_CAR_BOX_INNER_HEIGHT_mm",
+      "长宽高"
+    ];
+
+    const DEFAULT_FIELDS = [...ALLOWED_FIELDS];
+
+    const el = {
+      pdfFiles: document.getElementById("pdfFiles"),
+      fieldSearch: document.getElementById("fieldSearch"),
+      fieldChecks: document.getElementById("fieldChecks"),
+      previewBtn: document.getElementById("previewBtn"),
+      downloadBtn: document.getElementById("downloadBtn"),
+      selectAllBtn: document.getElementById("selectAllBtn"),
+      selectDefaultBtn: document.getElementById("selectDefaultBtn"),
+      clearBtn: document.getElementById("clearBtn"),
+      status: document.getElementById("status"),
+      table: document.getElementById("previewTable"),
+      errors: document.getElementById("errors"),
+      fileCount: document.getElementById("fileCount"),
+      rowCount: document.getElementById("rowCount"),
+      errorCount: document.getElementById("errorCount")
+    };
+
+    let latestColumns = [];
+    let latestRows = [];
+
+    function setStatus(message, type = "") {
+      el.status.textContent = message;
+      el.status.className = `status ${type}`.trim();
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function renderFields() {
+      const keyword = el.fieldSearch.value.trim().toLowerCase();
+      const selected = new Set(getSelectedColumns());
+      el.fieldChecks.innerHTML = "";
+
+      ALLOWED_FIELDS
+        .filter(name => !keyword || name.toLowerCase().includes(keyword))
+        .forEach(name => {
+          const label = document.createElement("label");
+          label.className = "check";
+          label.innerHTML = `
+            <input type="checkbox" value="${escapeHtml(name)}" ${selected.has(name) ? "checked" : ""}>
+            <span>${escapeHtml(name)}</span>
+          `;
+          el.fieldChecks.appendChild(label);
+        });
+    }
+
+    function getSelectedColumns() {
+      return Array.from(el.fieldChecks.querySelectorAll("input[type=checkbox]:checked"))
+        .map(x => x.value)
+        .filter(x => ALLOWED_FIELDS.includes(x));
+    }
+
+    function setSelectedColumns(columns) {
+      const normalized = new Set(columns.filter(x => ALLOWED_FIELDS.includes(x)));
+      Array.from(el.fieldChecks.querySelectorAll("input[type=checkbox]")).forEach(input => {
+        input.checked = normalized.has(input.value);
+      });
+    }
+
+    function buildFormData() {
+      const files = Array.from(el.pdfFiles.files || []);
+      const columns = getSelectedColumns();
+
+      if (!files.length) throw new Error("请先选择 PDF 文件。");
+      if (!columns.length) throw new Error("请至少勾选一个导出字段。");
+
+      const fd = new FormData();
+      files.forEach(file => fd.append("files", file, file.name));
+      fd.append("columns", JSON.stringify(columns));
+      return { fd, files, columns };
+    }
+
+    function renderPreview(columns, rows) {
+      const thead = el.table.querySelector("thead");
+      const tbody = el.table.querySelector("tbody");
+
+      if (!columns.length) {
+        thead.innerHTML = "<tr><th>无字段</th></tr>";
+        tbody.innerHTML = "<tr><td>请至少选择一个字段。</td></tr>";
+        return;
+      }
+
+      thead.innerHTML = `<tr>${columns.map(c => `<th>${escapeHtml(c)}</th>`).join("")}</tr>`;
+
+      if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="${columns.length}">没有提取到数据。</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = rows.map(row => {
+        return `<tr>${columns.map(c => `<td>${escapeHtml(row[c] ?? "")}</td>`).join("")}</tr>`;
+      }).join("");
+    }
+
+    function renderErrors(errors) {
+      if (!errors || !errors.length) {
+        el.errors.style.display = "none";
+        el.errors.innerHTML = "";
+        return;
+      }
+      el.errors.style.display = "block";
+      el.errors.innerHTML = `
+        <b>错误日志</b>
+        <ul>
+          ${errors.map(e => `<li>${escapeHtml(e.file || "")}：${escapeHtml(e.error || e.message || "")}</li>`).join("")}
+        </ul>
+      `;
+    }
+
+    async function runPreview() {
+      try {
+        const payload = buildFormData();
+        latestColumns = payload.columns;
+        latestRows = [];
+
+        el.previewBtn.disabled = true;
+        el.downloadBtn.disabled = true;
+        setStatus("正在上传并提取，请稍候...");
+
+        const res = await fetch("/api/preview", {
+          method: "POST",
+          body: payload.fd
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "提取失败。");
+
+        latestRows = Array.isArray(data.rows) ? data.rows : [];
+        renderPreview(latestColumns, latestRows);
+        renderErrors(data.errors || []);
+
+        el.fileCount.textContent = data.summary?.file_count ?? payload.files.length;
+        el.rowCount.textContent = data.summary?.row_count ?? latestRows.length;
+        el.errorCount.textContent = data.summary?.error_count ?? (data.errors || []).length;
+
+        el.downloadBtn.disabled = latestRows.length === 0;
+        setStatus(`提取完成：${latestRows.length} 行。请检查预览后下载 Excel。`, "ok");
+      } catch (err) {
+        setStatus(err.message || String(err), "err");
+      } finally {
+        el.previewBtn.disabled = false;
+      }
+    }
+
+    async function downloadExcel() {
+      try {
+        const payload = buildFormData();
+        el.downloadBtn.disabled = true;
+        setStatus("正在生成 Excel...");
+
+        const res = await fetch("/api/export", {
+          method: "POST",
+          body: payload.fd
+        });
+
+        if (!res.ok) {
+          let message = "Excel 生成失败。";
+          try {
+            const data = await res.json();
+            message = data.message || message;
+          } catch (_) {}
+          throw new Error(message);
+        }
+
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        const today = new Date().toISOString().slice(0, 10);
+        a.href = url;
+        a.download = `PDF_extract_result_${today}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+
+        setStatus("Excel 已生成并开始下载。", "ok");
+      } catch (err) {
+        setStatus(err.message || String(err), "err");
+      } finally {
+        el.downloadBtn.disabled = latestRows.length === 0;
+      }
+    }
+
+    el.fieldSearch.addEventListener("input", renderFields);
+    el.selectAllBtn.addEventListener("click", () => {
+      el.fieldSearch.value = "";
+      renderFields();
+      setSelectedColumns(ALLOWED_FIELDS);
+    });
+    el.selectDefaultBtn.addEventListener("click", () => {
+      el.fieldSearch.value = "";
+      renderFields();
+      setSelectedColumns(DEFAULT_FIELDS);
+    });
+    el.clearBtn.addEventListener("click", () => setSelectedColumns([]));
+    el.previewBtn.addEventListener("click", runPreview);
+    el.downloadBtn.addEventListener("click", downloadExcel);
+
+    renderFields();
+    setSelectedColumns(DEFAULT_FIELDS);
+  </script>
+</body>
+</html>
