@@ -304,7 +304,9 @@
       "DIM_CAR_BOX_INNER_LENGTH_mm",
       "DIM_CAR_BOX_INNER_WIDTH_mm",
       "DIM_CAR_BOX_INNER_HEIGHT_mm",
-      "长宽高"
+      "长宽高",
+      "包装箱类型",
+      "POS_CAR_GLASS_WALL_C",
     ];
 
     const DEFAULT_FIELDS = [...ALLOWED_FIELDS];
@@ -363,7 +365,7 @@
 
     function getSelectedColumns() {
       return Array.from(el.fieldChecks.querySelectorAll("input[type=checkbox]:checked"))
-        .map(x => x.value)
+        .map(input => input.value)
         .filter(x => ALLOWED_FIELDS.includes(x));
     }
 
@@ -482,9 +484,8 @@
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
-        const today = new Date().toISOString().slice(0, 10);
         a.href = url;
-        a.download = `PDF_extract_result_${today}.xlsx`;
+        a.download = `PDF_extract_result_${new Date().toISOString().slice(0, 10)}.xlsx`;
         document.body.appendChild(a);
         a.click();
         a.remove();
