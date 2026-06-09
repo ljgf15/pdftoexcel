@@ -1,141 +1,74 @@
-# -*- coding: utf-8 -*-
-import json
-import shutil
-import tempfile
-from datetime import datetime
-from pathlib import Path
-from typing import List
-
+# app.py
 from fastapi import FastAPI, UploadFile, File, Form
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
+import json
+import os
+import uuid
+from pathlib import Path
 
 from extractor import (
-    ALLOWED_COLUMNS,
     parse_pdf,
     write_excel,
-    get_row_value,
+    ALLOWED_COLUMNS
 )
 
+app = FastAPI()
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
-app = FastAPI(title="PDF采购订单提取到Excel")
+OUTPUT_DIR = "output"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-
-def parse_columns(columns_raw: str):
-    try:
-        columns = json.loads(columns_raw)
-    except Exception:
-        return []
-
-    if not isinstance(columns, list):
-        return []
-
-    result = []
-    for col in columns:
-        name = str(col).strip()
-        if name in ALLOWED_COLUMNS and name not in result:
-            result.append(name)
-    return result
-
-
-async def save_uploads(files: List[UploadFile]):
-    temp_dir = Path(tempfile.mkdtemp(prefix="pdf_excel_"))
-    pdf_paths = []
-
-    for file in files:
-        filename = Path(file.filename or "upload.pdf").name
-        if not filename.lower().endswith(".pdf"):
-            continue
-
-        target = temp_dir / filename
-        content = await file.read()
-        target.write_bytes(content)
-        pdf_paths.append(target)
-
-    return temp_dir, pdf_paths
-
-
-def filter_rows(rows, columns):
-    filtered = []
-    for row in rows:
-        filtered.append({col: get_row_value(row, col) for col in columns})
-    return filtered
-
+@app.get("/", response_class=HTMLResponse)
+def index():
+    with open("static/index.html", "r", encoding="utf-8") as f:
+        return f.read()
 
 @app.post("/api/preview")
-async def preview(files: List[UploadFile] = File(...), columns: str = Form(...)):
-    selected_columns = parse_columns(columns)
-    if not selected_columns:
-        return JSONResponse(status_code=400, content={"message": "请至少选择一个允许的导出字段。"})
-
-    temp_dir, pdf_paths = await save_uploads(files)
-    all_rows = []
-    errors = []
-
+async def api_preview(files: list[UploadFile] = File(...), columns: str = Form(...)):
     try:
-        if not pdf_paths:
-            return JSONResponse(status_code=400, content={"message": "请上传 PDF 文件。"})
-
-        for pdf_path in pdf_paths:
+        cols = json.loads(columns)
+        all_rows = []
+        errors = []
+        for f in files:
             try:
-                rows = parse_pdf(pdf_path)
-                if not rows:
-                    errors.append({"file": pdf_path.name, "error": "未提取到数据，请确认 PDF 是文字型且格式已覆盖。"})
-                else:
-                    all_rows.extend(rows)
-            except Exception as exc:
-                errors.append({"file": pdf_path.name, "error": str(exc)})
-
-        preview_rows = filter_rows(all_rows, selected_columns)
+                suffix = Path(f.filename).suffix
+                tmp_path = f"tmp_{uuid.uuid4()}{suffix}"
+                with open(tmp_path, "wb") as fp:
+                    fp.write(await f.read())
+                rows = parse_pdf(tmp_path)
+                all_rows.extend(rows)
+                os.remove(tmp_path)
+            except Exception as e:
+                errors.append({"file": f.filename, "error": str(e)})
         return {
-            "rows": preview_rows,
+            "rows": all_rows,
             "errors": errors,
             "summary": {
-                "file_count": len(pdf_paths),
-                "row_count": len(preview_rows),
-                "error_count": len(errors),
-            },
+                "file_count": len(files),
+                "row_count": len(all_rows),
+                "error_count": len(errors)
+            }
         }
-    finally:
-        shutil.rmtree(temp_dir, ignore_errors=True)
-
+    except Exception as e:
+        return {"message": str(e)}, 500
 
 @app.post("/api/export")
-async def export_excel(files: List[UploadFile] = File(...), columns: str = Form(...)):
-    selected_columns = parse_columns(columns)
-    if not selected_columns:
-        return JSONResponse(status_code=400, content={"message": "请至少选择一个允许的导出字段。"})
-
-    temp_dir, pdf_paths = await save_uploads(files)
+async def api_export(files: list[UploadFile] = File(...), columns: str = Form(...)):
+    cols = json.loads(columns)
     all_rows = []
     errors = []
-
-    try:
-        if not pdf_paths:
-            return JSONResponse(status_code=400, content={"message": "请上传 PDF 文件。"})
-
-        for pdf_path in pdf_paths:
-            try:
-                rows = parse_pdf(pdf_path)
-                if not rows:
-                    errors.append({"file": pdf_path.name, "error": "未提取到数据"})
-                else:
-                    all_rows.extend(rows)
-            except Exception as exc:
-                errors.append({"file": pdf_path.name, "error": str(exc)})
-
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_path = temp_dir / f"PDF_extract_result_{timestamp}.xlsx"
-        write_excel(all_rows, selected_columns, output_path, errors)
-
-        return FileResponse(
-            output_path,
-            filename=output_path.name,
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-    finally:
-        # FileResponse 会在响应后读取文件。这里不立即删除 temp_dir，Render 临时目录会自动清理。
-        pass
-
-
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+    for f in files:
+        try:
+            suffix = Path(f.filename).suffix
+            tmp_path = f"tmp_{uuid.uuid4()}{suffix}"
+            with open(tmp_path, "wb") as fp:
+                fp.write(await f.read())
+            rows = parse_pdf(tmp_path)
+            all_rows.extend(rows)
+            os.remove(tmp_path)
+        except Exception as e:
+            errors.append({"file": f.filename, "error": str(e)})
+    out_path = os.path.join(OUTPUT_DIR, f"result_{uuid.uuid4()}.xlsx")
+    write_excel(all_rows, cols, out_path, errors)
+    return FileResponse(out_path, filename="PDF_extract_result.xlsx")
