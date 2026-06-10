@@ -48,6 +48,8 @@ ALLOWED_COLUMNS = [
     "DIM_CAR_BOX_INNER_HEIGHT_mm",
     "长宽高",
     "包装箱类别",
+    "参数名称",
+    "参数值",
 ]
 
 
@@ -123,6 +125,60 @@ def extract_packaging_box_type(block):
         )
 
     return ""
+
+def extract_named_parameters(block):
+    """
+    提取 KONE 明细块中的通用参数。
+
+    示例：
+    KCO_RUSH_BUILDING_STATE F
+
+    返回：
+    [
+        {"参数名称": "KCO_RUSH_BUILDING_STATE", "参数值": "F"}
+    ]
+    """
+    if not block:
+        return []
+
+    result = []
+    text = flatten_text(block)
+
+    exclude_prefixes = (
+        "DIM_CAR_BOX_INNER_",
+        "SALES_",
+        "PROJECT_",
+        "PURCHASE_",
+    )
+
+    pattern = re.compile(
+        r"\b([A-Z][A-Z0-9_]{3,})\b\s+([A-Za-z0-9][A-Za-z0-9_,，./\-]*)",
+        re.I,
+    )
+
+    for match in pattern.finditer(text):
+        name = match.group(1).strip()
+        value = match.group(2).strip()
+
+        if "_" not in name:
+            continue
+
+        if name.upper().startswith(exclude_prefixes):
+            continue
+
+        if name.upper() in {"REV", "CHN"}:
+            continue
+
+        value = value.replace("，", ",")
+
+        if name and value:
+            result.append({
+                "参数名称": name,
+                "参数值": value,
+            })
+
+    return result
+
 
 
 
@@ -535,7 +591,18 @@ def parse_kone_pdf(pdf_path, full_text):
         # 物料规格兜底：门类用 LL*HH，木箱用长宽高。
         row["物料规格"] = row["门尺寸_LL*HH"] or row["长宽高"]
 
-        rows.append(row)
+        named_params = extract_named_parameters(block)
+
+        if named_params:
+            for param in named_params:
+                param_row = row.copy()
+                param_row["参数名称"] = param["参数名称"]
+                param_row["参数值"] = param["参数值"]
+                rows.append(param_row)
+        else:
+            row["参数名称"] = ""
+            row["参数值"] = ""
+            rows.append(row)
 
     return rows
 
